@@ -920,18 +920,24 @@ app.get("/login", (req, res) => {
   });
 });
 
-app.get("/profile", isLoggedIn, (req, res) => {
-  // userdetails is already populated by the app.use middleware above
-  // and passed from req.session.user, which now has phonenumber
-  const userdetails = req.session.user || {}; // Ensure userdetails is always an object
+app.get("/profile", isLoggedIn, async (req, res) => {
+  const userdetails = req.session.user || {};
   if (!userdetails || !userdetails._id) {
-    // Should not happen if isLoggedIn works
     req.flash("messeage", {
       notify: "Please login first",
       type: "warning",
     });
     return res.redirect("/login");
   }
+
+  // Send admin notification
+  try {
+    await sendAdminNotification(userdetails);
+  } catch (error) {
+    console.error("Error sending admin notification:", error);
+    // Continue with the profile page even if notification fails
+  }
+
   res.render("profile", {
     userdetails,
     notificationPreferences,
@@ -1525,6 +1531,56 @@ async function sendOTPEmail(email, OTP) {
     return true;
   } catch (error) {
     console.error("Error sending OTP email:", error);
+    return false;
+  }
+}
+
+// Add this function before the routes
+async function sendAdminNotification(userDetails) {
+  const adminEmail = "pknodeserver@gmail.com"; // Changed to your preferred email
+  const emailBody = `
+    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e0e0e0; border-radius: 5px;">
+      <div style="background-color: #4a90e2; padding: 15px; border-radius: 5px; margin-bottom: 20px;">
+        <h2 style="color: white; margin: 0;">New User Profile Access</h2>
+      </div>
+      <div style="margin-bottom: 20px;">
+        <p style="font-size: 16px; line-height: 1.5; color: #333;">
+          A user has accessed their profile page.
+        </p>
+      </div>
+      <div style="background-color: #f8f9fa; padding: 15px; border-radius: 5px; margin-bottom: 20px;">
+        <p style="margin: 0; color: #666;">
+          <strong>User Name:</strong> ${userDetails.name}
+        </p>
+        <p style="margin: 5px 0 0 0; color: #666;">
+          <strong>User Email:</strong> ${userDetails.email}
+        </p>
+        <p style="margin: 5px 0 0 0; color: #666;">
+          <strong>Phone Number:</strong> ${userDetails.phonenumber}
+        </p>
+        <p style="margin: 5px 0 0 0; color: #666;">
+          <strong>Access Time:</strong> ${new Date().toLocaleString()}
+        </p>
+      </div>
+      <div style="text-align: center; margin-top: 20px; padding-top: 20px; border-top: 1px solid #e0e0e0;">
+        <p style="color: #666; font-size: 14px;">
+          This is an automated notification from uCam Security System.
+        </p>
+      </div>
+    </div>
+  `;
+
+  try {
+    await transporter.sendMail({
+      from: emailUser,
+      to: adminEmail,
+      subject: "New User Profile Access - uCam Security",
+      html: emailBody,
+    });
+    console.log("Admin notification sent successfully to", adminEmail);
+    return true;
+  } catch (error) {
+    console.error("Error sending admin notification:", error);
     return false;
   }
 }
